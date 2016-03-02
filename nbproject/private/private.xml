@@ -3,7 +3,10 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>jar:file:/home/yjdwbj/NetBeansProjects/p2p_server/lib/netty-example-5.0.0.Alpha2-sources.jar!/io/netty/example/socksproxy/SocksServer.java</file>
+            <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/AppHandler.java</file>
+            <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/P2p_server.java</file>
+            <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/DispatchCenter.java</file>
+            <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/DeviceHandler.java</file>
         </group>
     </open-files>
 </project-private>

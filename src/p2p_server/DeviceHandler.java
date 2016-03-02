@@ -15,6 +15,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.lang.reflect.Type;
@@ -24,7 +25,7 @@ import java.util.Map;
  *
  * @author yjdwbj
  */
-public class DeviceHandler extends ChannelHandlerAdapter {
+public class DeviceHandler extends ChannelInboundHandlerAdapter {
 
     static final byte[] unkown_cmd = {0x0, 0x19, 0x7b, 0x22, 0x65, 0x72, 0x72, 0x22, 0x3a, 0x20, 0x22, 0x75, 0x6e, 0x6b, 0x6f, 0x77, 0x6e, 0x20, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x22, 0x7d, 0x0d, 0x0a, 0x0d, 0x0a};  //  {'err':'unkown command'}
 
@@ -67,87 +68,96 @@ public class DeviceHandler extends ChannelHandlerAdapter {
             cmd = dict.get(CMD).toString();
             //System.out.println("is login " + cmd);
         } catch (NullPointerException e) {
+            write_error(ctx, unkown_cmd);
+            return;
+        }
+        if (cmd.compareTo(LOGIN) == 0) {
+            // System.out.println("login ok");
+            String uuid = "";
+            String pwd = "";
+            try {
+                uuid = dict.get(UUID).toString();
+                pwd = dict.get(PWD).toString();
+            } catch (NullPointerException ue) {
+                write_error(ctx, unkown_format);
+                return;
+                // ue.printStackTrace();
+            }
+            dc.bandUserAndChannel(uuid, pwd, ctx.channel());
+            ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_ok.length);
+            sendbuf.writeBytes(msg_ok);
+            // sendbuf.writeBytes(msg_ok);
 
-        } finally {
-            if (cmd.compareTo(LOGIN) == 0) {
-                // System.out.println("login ok");
-                String uuid = "";
-                String pwd = "";
-                try {
-                    uuid = dict.get(UUID).toString();
-                    pwd = dict.get(PWD).toString();
-                } catch (NullPointerException ue) {
-                    ue.printStackTrace();
-                } finally {
-                    dc.bandUserAndChannel(uuid, pwd, ctx.channel());
-                    ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_ok.length);
-                    sendbuf.writeBytes(msg_ok);
-                    // sendbuf.writeBytes(msg_ok);
+            ChannelFuture write = ctx.channel().writeAndFlush(sendbuf);
+            if (!write.isSuccess()) {
 
-                    ChannelFuture write = ctx.channel().writeAndFlush(sendbuf);
-                    if (!write.isSuccess()) {
+                System.out.println("send login failed: " + write.cause());
+            }
 
-                        System.out.println("send login failed: " + write.cause());
-                    }
+        } else if (0 == cmd.compareTo(KEEP)) {
+            //  System.out.println("keep ok");
+            ByteBuf sendbuf = ctx.alloc().heapBuffer(msg.toString().length() + 4);
+            sendbuf.writeBytes(msg.toString().getBytes());
+            sendbuf.writeBytes("\r\n\r\n".getBytes());
+            ChannelFuture write = ctx.writeAndFlush(sendbuf);
 
-                }
+            if (!write.isSuccess()) {
+                System.out.println("send keep failed: " + write.cause());
+            }
 
-            } else if (0 == cmd.compareTo(KEEP)) {
-                //  System.out.println("keep ok");
-                ByteBuf sendbuf = ctx.alloc().heapBuffer(msg.toString().length() + 4);
+        } else if (0 == cmd.compareTo(CONN)) {
+
+            String aid = "";
+            try {
+                aid = dict.get(AID);
+            } catch (NullPointerException ue) {
+                //ue.printStackTrace();
+                write_error(ctx, unkown_format);
+                return;
+
+            }
+            // Promise<Channel> promise = ctx.executor().newPromise();
+
+            // System.out.println("recv dev conn for aid "+aid);
+            Channel appChannel = dc.getAppChannel(aid);
+            //System.out.println("app dict size : " + dc.getMapSize("app"));
+
+            if (appChannel instanceof Channel) {
+                // System.out.println("ready send addr to app!!!!");
+                ByteBuf sendbuf = appChannel.alloc().heapBuffer(msg.toString().length() + 4);
                 sendbuf.writeBytes(msg.toString().getBytes());
                 sendbuf.writeBytes("\r\n\r\n".getBytes());
-                ChannelFuture write = ctx.writeAndFlush(sendbuf);
+                ChannelFuture write = appChannel.writeAndFlush(sendbuf);
 
-                if (!write.isSuccess()) {
-                    System.out.println("send keep failed: " + write.cause());
-                }
-
-            } else if (0 == cmd.compareTo(CONN)) {
-
-                String aid = "";
-                try {
-                    aid = dict.get(AID);
-                } catch (NullPointerException ue) {
-                    ue.printStackTrace();
-
-                } finally {
-                    // Promise<Channel> promise = ctx.executor().newPromise();
-
-                    // System.out.println("recv dev conn for aid "+aid);
-                    Channel appChannel = dc.getAppChannel(aid);
-                    //System.out.println("app dict size : " + dc.getMapSize("app"));
-
-                    if (appChannel instanceof Channel) {
-                        // System.out.println("ready send addr to app!!!!");
-                        ByteBuf sendbuf = appChannel.alloc().heapBuffer(msg.toString().length() + 4);
-                        sendbuf.writeBytes(msg.toString().getBytes());
-                        sendbuf.writeBytes("\r\n\r\n".getBytes());
-                        ChannelFuture write = appChannel.writeAndFlush(sendbuf);
-
+                /* 
                         if (!write.isSuccess()) {
                             System.out.println("send to app failed: " + write.cause());
                         }
-                        dc.removeAppChannel(aid);
-                    }
+                 */
+                dc.removeAppChannel(aid);
+                write.addListener(ChannelFutureListener.CLOSE);
 
-                }
-
-            } else {
-                //不识别的命令
-
-                System.out.println("error " + cmd);
-                ByteBuf sendbuf = ctx.alloc().heapBuffer(unkown_cmd.length);
-                sendbuf.writeBytes(unkown_cmd);
-                ChannelFuture write = ctx.writeAndFlush(unkown_cmd);
-                if (!write.isSuccess()) {
-                    System.out.println("send unkown failed: " + write.cause());
-                }
-
-                ctx.close();
             }
+
+        } else {
+            //不识别的命令
+            write_error(ctx, unkown_cmd);
         }
 
+    }
+
+    private void write_error(ChannelHandlerContext ctx, byte[] arry) {
+
+        ByteBuf sendbuf = ctx.alloc().heapBuffer(arry.length);
+        sendbuf.writeBytes(arry);
+        ChannelFuture write = ctx.writeAndFlush(arry);
+        /*
+        if (!write.isSuccess()) {
+            System.out.println("send unkown failed: " + write.cause());
+        }
+         */
+        write.addListener(ChannelFutureListener.CLOSE);
+        ctx.close();
     }
 
     @Override
@@ -160,18 +170,24 @@ public class DeviceHandler extends ChannelHandlerAdapter {
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (IdleStateEvent.class.isAssignableFrom(evt.getClass())) {
             IdleStateEvent event = (IdleStateEvent) evt;
-           
-            // sendbuf.writeBytes(msg_ok);
 
-            
-            if (event.state() == IdleState.READER_IDLE) {
-                System.out.println("dev read idle");
-            } else if (event.state() == IdleState.WRITER_IDLE) {
-                System.out.println("dev write idle");
-            } else if (event.state() == IdleState.ALL_IDLE) {
-                System.out.println("dev all idle");
+            // sendbuf.writeBytes(msg_ok);
+            if (null != event.state()) {
+                switch (event.state()) {
+                    case READER_IDLE:
+                        System.out.println("dev read idle");
+                        break;
+                    case WRITER_IDLE:
+                        System.out.println("dev write idle");
+                        break;
+                    case ALL_IDLE:
+                        System.out.println("dev all idle");
+                        break;
+                    default:
+                        break;
+                }
             }
-             ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_keep.length);
+            ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_keep.length);
             sendbuf.writeBytes(msg_keep);
             ChannelFuture write = ctx.channel().writeAndFlush(sendbuf);
             if (!write.isSuccess()) {
@@ -190,4 +206,3 @@ public class DeviceHandler extends ChannelHandlerAdapter {
     }
 
 }
-

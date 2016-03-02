@@ -4,6 +4,7 @@
  * and open the template in the editor.
  */
 package p2p_server;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -15,6 +16,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.lang.reflect.Type;
@@ -25,7 +27,7 @@ import p2p_server.DispatchCenter;
  *
  * @author yjdwbj
  */
-public class AppHandler extends ChannelHandlerAdapter {
+public class AppHandler extends ChannelInboundHandlerAdapter {
 
     static final byte[] unkown_cmd = {0x0, 0x19, 0x7b, 0x22, 0x65, 0x72, 0x72, 0x22, 0x3a, 0x20, 0x22, 0x75, 0x6e, 0x6b, 0x6f, 0x77, 0x6e, 0x20, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x22, 0x7d, 0x0d, 0x0a, 0x0d, 0x0a};  //  {'err':'unkown command'}
 
@@ -52,7 +54,6 @@ public class AppHandler extends ChannelHandlerAdapter {
         this.dc = dc;
     }
 
-
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg)
             throws Exception {
@@ -71,64 +72,67 @@ public class AppHandler extends ChannelHandlerAdapter {
             cmd = dict.get(CMD).toString();
             //System.out.println("is login " + cmd);
         } catch (NullPointerException e) {
+            write_error(ctx, unkown_cmd);
+            return;
 
-        } finally {
-            if (0 == cmd.compareTo(CONN)) {
+        }
+        if (0 == cmd.compareTo(CONN)) {
 
-                String addr = "";
-                String uuid = "";
-                String pwd = "";
-                try {
-                    addr = dict.get(ADDR);
-                    uuid = dict.get(UUID);
-                    pwd = dict.get(PWD);
-                } catch (NullPointerException ue) {
-                    //ue.printStackTrace();
-                    write_error(ctx, unkown_format);
-
-                } finally {
-                    Object[] obj = null;
-                    try {
-                        obj = dc.getDevChannel(uuid);
-                    } catch (NullPointerException uuidptr) {
-                        write_error(ctx, err_offline);
-                    } finally {
-                        if (pwd.compareTo((String) obj[0]) == 0) {
-                            /* 认证成功*/
-                            Channel devChannel = (Channel) obj[1];
-                            String aid = ctx.channel().id().asShortText();
-                            dc.bandAppAndChannel(aid, ctx.channel());
-                            dict.put(AID, aid);
-                            dict.remove(CMD);
-                            dict.put(MSG,CONN);
-                            String jsondata = json.toJson(dict);
-                            int len = jsondata.length() + 2;
-                            byte[] lenarry = {0x0, 0x0};
-                            lenarry[0] = (byte) (0xff00 & len);
-                            lenarry[1] = (byte) (0xff & len);
-                            ByteBuf sendbuf = devChannel.alloc().heapBuffer(len + 4);
-                            sendbuf.writeBytes(lenarry);
-                            sendbuf.writeBytes(jsondata.getBytes());
-                            sendbuf.writeBytes("\r\n\r\n".getBytes());
-                            ChannelFuture write = devChannel.writeAndFlush(sendbuf);
-
-                            if (!write.isSuccess()) {
-                                System.out.println("send to app failed: " + write.cause());
-                            }
-                            
-
-                        } else {
-                            /*密码错误 */
-                            write_error(ctx, err_auth);
-                        }
-                    }
-                }
-
-            } else {
-                //不识别的命令
-                write_error(ctx, unkown_cmd);
+            String addr = "";
+            String uuid = "";
+            String pwd = "";
+            try {
+                addr = dict.get(ADDR);
+                uuid = dict.get(UUID);
+                pwd = dict.get(PWD);
+            } catch (NullPointerException ue) {
+                //ue.printStackTrace();
+                write_error(ctx, unkown_format);
+                return;
 
             }
+
+            Object[] obj = null;
+            try {
+                obj = dc.getDevChannel(uuid);
+            } catch (NullPointerException uuidptr) {
+                write_error(ctx, err_offline);
+                return;
+            }
+
+            if (pwd.compareTo((String) obj[0]) == 0) {
+                /* 认证成功*/
+                Channel devChannel = (Channel) obj[1];
+                String aid = ctx.channel().id().asShortText();
+                dc.bandAppAndChannel(aid, ctx.channel());
+                dict.put(AID, aid);
+                dict.remove(CMD);
+                dict.put(MSG, CONN);
+                String jsondata = json.toJson(dict);
+                int len = jsondata.length() + 2;
+                byte[] lenarry = {0x0, 0x0};
+                lenarry[0] = (byte) (0xff00 & len);
+                lenarry[1] = (byte) (0xff & len);
+                ByteBuf sendbuf = devChannel.alloc().heapBuffer(len + 4);
+                sendbuf.writeBytes(lenarry);
+                sendbuf.writeBytes(jsondata.getBytes());
+                sendbuf.writeBytes("\r\n\r\n".getBytes());
+                ChannelFuture write = devChannel.writeAndFlush(sendbuf);
+                /*
+                            if (!write.isSuccess()) {
+                                System.out.println("send to app failed: " + write.cause());
+                            }*/
+                // 
+
+            } else {
+                /*密码错误 */
+                write_error(ctx, err_auth);
+            }
+
+        } else {
+            //不识别的命令
+            write_error(ctx, unkown_cmd);
+
         }
 
     }
@@ -138,9 +142,12 @@ public class AppHandler extends ChannelHandlerAdapter {
         ByteBuf sendbuf = ctx.alloc().heapBuffer(arry.length);
         sendbuf.writeBytes(arry);
         ChannelFuture write = ctx.writeAndFlush(arry);
+        /*
         if (!write.isSuccess()) {
             System.out.println("send unkown failed: " + write.cause());
         }
+         */
+        write.addListener(ChannelFutureListener.CLOSE);
         ctx.close();
     }
 
@@ -148,29 +155,6 @@ public class AppHandler extends ChannelHandlerAdapter {
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
 
         ctx.flush();
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-        if (IdleStateEvent.class.isAssignableFrom(evt.getClass())) {
-            IdleStateEvent event = (IdleStateEvent) evt;
-
-            // sendbuf.writeBytes(msg_ok);
-            if (event.state() == IdleState.READER_IDLE) {
-                System.out.println("dev read idle");
-            } else if (event.state() == IdleState.WRITER_IDLE) {
-                System.out.println("dev write idle");
-            } else if (event.state() == IdleState.ALL_IDLE) {
-                System.out.println("dev all idle");
-            }
-            ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_keep.length);
-            sendbuf.writeBytes(msg_keep);
-            ChannelFuture write = ctx.channel().writeAndFlush(sendbuf);
-            if (!write.isSuccess()) {
-
-                System.out.println("send login failed: " + write.cause());
-            }
-        }
     }
 
     @Override
