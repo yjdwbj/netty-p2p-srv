@@ -11,11 +11,14 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.handler.codec.DelimiterBasedFrameDecoder;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -37,13 +40,16 @@ public class P2p_server {
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         List<ChannelFuture> futures = new ArrayList<>();
+        SelfSignedCertificate ssc = new SelfSignedCertificate();
+        SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey())
+                .build();
 
         try {
             ServerBootstrap appboot = new ServerBootstrap();
             appboot.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 8192)
-                    .childHandler(new AppChildChannelHandler());
+                    .childHandler(new AppChildChannelHandler(sslCtx));
 
             appboot.option(ChannelOption.SO_REUSEADDR, true);
             appboot.option(ChannelOption.TCP_NODELAY, true);
@@ -55,7 +61,7 @@ public class P2p_server {
             devboot.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 8192)
-                    .childHandler(new DevChildChannelHandler());
+                    .childHandler(new DevChildChannelHandler(sslCtx));
 
             devboot.option(ChannelOption.SO_REUSEADDR, true);
             devboot.option(ChannelOption.TCP_NODELAY, true);
@@ -86,31 +92,47 @@ public class P2p_server {
 
     private class DevChildChannelHandler extends ChannelInitializer<SocketChannel> {
 
+        private final SslContext sslCtx;
+
+        public DevChildChannelHandler(SslContext sslCtx) {
+            this.sslCtx = sslCtx;
+        }
+
         @Override
         protected void initChannel(SocketChannel arg0) throws Exception {
             // arg0.pipeline().addLast(new PacketHandler());
             //arg0.pipeline().addLast(new LineBasedFrameDecoder(8192));
+            ChannelPipeline pipeline = arg0.pipeline();
+            pipeline.addLast(sslCtx.newHandler(arg0.alloc()));
             ByteBuf delimiter = Unpooled.copiedBuffer("\r\n\r\n".getBytes());
             //arg0.pipeline().addLast(new LineBasedFrameDecoder(8192));
-           // arg0.pipeline().addLast(new IdleStateHandler(readerIdleTimeSeconds,writerIdleTimeSeconds, allIdleTimeSeconds));
-            arg0.pipeline().addLast(new DelimiterBasedFrameDecoder(8192, delimiter));
-            arg0.pipeline().addLast(new StringDecoder());
-            arg0.pipeline().addLast(new DeviceHandler(dc));
+            // arg0.pipeline().addLast(new IdleStateHandler(readerIdleTimeSeconds,writerIdleTimeSeconds, allIdleTimeSeconds));
+            pipeline.addLast(new DelimiterBasedFrameDecoder(8192, delimiter));
+            pipeline.addLast(new StringDecoder());
+            pipeline.addLast(new DeviceHandler(dc));
         }
     }
 
     private class AppChildChannelHandler extends ChannelInitializer<SocketChannel> {
 
+        private final SslContext sslCtx;
+
+        public AppChildChannelHandler(SslContext sslCtx) {
+            this.sslCtx = sslCtx;
+        }
+
         @Override
         protected void initChannel(SocketChannel arg0) throws Exception {
             // arg0.pipeline().addLast(new PacketHandler());
             //arg0.pipeline().addLast(new LineBasedFrameDecoder(8192));
+            ChannelPipeline pipeline = arg0.pipeline();
+            pipeline.addLast(sslCtx.newHandler(arg0.alloc()));
             ByteBuf delimiter = Unpooled.copiedBuffer("\r\n\r\n".getBytes());
             //arg0.pipeline().addLast(new LineBasedFrameDecoder(8192));
             //arg0.pipeline().addLast(new IdleStateHandler(readerIdleTimeSeconds,writerIdleTimeSeconds, allIdleTimeSeconds));
-            arg0.pipeline().addLast(new DelimiterBasedFrameDecoder(8192, delimiter));
-            arg0.pipeline().addLast(new StringDecoder());
-            arg0.pipeline().addLast(new AppHandler(dc));
+            pipeline.addLast(new DelimiterBasedFrameDecoder(8192, delimiter));
+            pipeline.addLast(new StringDecoder());
+            pipeline.addLast(new AppHandler(dc));
 
         }
     }
@@ -126,4 +148,3 @@ public class P2p_server {
     }
 
 }
-

@@ -17,9 +17,12 @@ import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.util.concurrent.GenericFutureListener;
 import java.lang.reflect.Type;
+import java.net.InetAddress;
 import java.util.Map;
 import p2p_server.DispatchCenter;
 
@@ -52,6 +55,30 @@ public class AppHandler extends ChannelInboundHandlerAdapter {
 
     public AppHandler(DispatchCenter dc) {
         this.dc = dc;
+    }
+
+    @Override
+    public void channelActive(final ChannelHandlerContext ctx) {
+        // Once session is secured, send a greeting and register the channel to the global channel
+        // list so the channel received the messages from others.
+        ctx.pipeline().get(SslHandler.class).handshakeFuture().addListener(
+                new GenericFutureListener<Future<Channel>>() {
+            @Override
+            public void operationComplete(Future<Channel> future) throws Exception {
+                ChannelFuture flag = ctx.writeAndFlush(
+                        "Welcome to " + InetAddress.getLocalHost().getHostName() + " secure chat service!\n");
+                /*
+                if (!flag.isSuccess()) {
+                    System.out.println(" app ssl error " + flag.cause());
+
+                } else {
+                    System.out.println("connected ssl");
+
+                }
+                */
+
+            }
+        });
     }
 
     @Override
@@ -161,8 +188,8 @@ public class AppHandler extends ChannelInboundHandlerAdapter {
     public void exceptionCaught(ChannelHandlerContext ctx,
             Throwable cause) {
         System.out.println("app exception " + cause);
-       // cause.printStackTrace();
-       // ctx.close();
+        // cause.printStackTrace();
+        // ctx.close();
     }
 
 }
