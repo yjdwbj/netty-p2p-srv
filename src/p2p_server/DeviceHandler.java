@@ -200,9 +200,12 @@ public class DeviceHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
             Throwable cause) {
-        System.out.println("exception " + cause);
-        cause.printStackTrace();
-        ctx.close();
+        System.out.println("dev exception " + cause);
+   
+        dc.removeDevChannel(ctx.channel());
+ 
+        //cause.printStackTrace();
+       // ctx.close();
     }
 
 }

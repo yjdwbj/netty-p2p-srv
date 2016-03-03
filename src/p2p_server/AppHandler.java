@@ -160,9 +160,9 @@ public class AppHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
             Throwable cause) {
-        System.out.println("exception " + cause);
-        cause.printStackTrace();
-        ctx.close();
+        System.out.println("app exception " + cause);
+       // cause.printStackTrace();
+       // ctx.close();
     }
 
 }

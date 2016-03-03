@@ -10,6 +10,7 @@ import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import io.netty.util.concurrent.GlobalEventExecutor;
 
 /**
@@ -77,12 +78,47 @@ public class DispatchCenter {
         UserAndChannel.remove(key);
     }
     
+    public void removeDevChannel(Channel oldChannel)
+    {
+        Set<Map.Entry<String,Object[]>> entrySet  = UserAndChannel.entrySet();
+        for(Map.Entry<String,Object[]> entry : entrySet)
+        {
+            Object[] obj = entry.getValue();
+            String key = entry.getKey();
+            if(oldChannel.equals((Channel)obj[1]))
+            {
+                //System.out.println("remove object is "+oldChannel+obj[0]);
+                this.removeDevChannel(key);
+                break;
+            }
+        }
+    }
+    
     public void removeAppChannel(String key)
     {
         Channel d = AppAndChannel.get(key);
-        d.close();
+        try{
+            d.close();
+        }catch (NullPointerException up){
+            
+        }
         
         AppAndChannel.remove(key);
+    }
+    
+    public void removeAppChannel(Channel oldChannel)
+    {
+        Set<Map.Entry<String,Channel>> entrySet  = AppAndChannel.entrySet();
+        for(Map.Entry<String,Channel> entry : entrySet)
+        {
+            String key = entry.getKey();
+            Channel val = entry.getValue();
+            if(oldChannel.equals(val))
+            {
+                this.removeAppChannel(key);
+            }
+        }
+        
     }
     
     public int getMapSize(String mapName)
