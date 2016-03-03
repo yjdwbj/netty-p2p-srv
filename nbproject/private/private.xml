@@ -5,6 +5,7 @@
         <group>
             <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/AppHandler.java</file>
             <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/P2p_server.java</file>
+            <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/DispatchCenter.java</file>
             <file>jar:file:/home/yjdwbj/NetBeansProjects/p2p_server/lib/netty-example-4.1.0.CR3-sources.jar!/io/netty/example/securechat/SecureChatServerInitializer.java</file>
             <file>file:/home/yjdwbj/NetBeansProjects/p2p_server/src/p2p_server/DeviceHandler.java</file>
         </group>

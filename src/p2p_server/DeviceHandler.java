@@ -22,6 +22,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.lang.reflect.Type;
 import java.net.InetAddress;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -63,7 +64,7 @@ public class DeviceHandler extends ChannelInboundHandlerAdapter {
             public void operationComplete(Future<Channel> future) throws Exception {
                 ChannelFuture flag = ctx.writeAndFlush(
                         "Welcome to " + InetAddress.getLocalHost().getHostName() + " secure chat service!\n");
-               /*
+                /*
                 if (!flag.isSuccess()) {
                     System.out.println(" dev ssl error " + flag.cause());
 
@@ -71,7 +72,7 @@ public class DeviceHandler extends ChannelInboundHandlerAdapter {
                     System.out.println("connected ssl");
 
                 }
-                */
+                 */
 
             }
         });
@@ -110,6 +111,35 @@ public class DeviceHandler extends ChannelInboundHandlerAdapter {
                 return;
                 // ue.printStackTrace();
             }
+            /*检查是否重新登录，如果已经登录了，就通知旧的连接，并关闭旧的连接 */
+            Object[] oldobj = null;
+            try {
+                oldobj = dc.getDevChannel(uuid);
+            } catch (NullPointerException npe) {
+            }
+
+            if (oldobj != null) {
+                /* 清除原来的连接  */
+                Channel oldch = (Channel) oldobj[1];
+                Map<String, String> notifyDict = new HashMap<>();
+                notifyDict.put(MSG, "new login from " + ctx.channel().remoteAddress());
+                String jsondata = json.toJson(notifyDict);
+                ByteBuf sendbuf = oldch.alloc().heapBuffer(jsondata.toString().length() + 4);
+                int len = jsondata.length() + 2;
+                byte[] lenarry = {0x0, 0x0};
+                lenarry[0] = (byte) (0xff00 & len);
+                lenarry[1] = (byte) (0xff & len);
+                sendbuf.writeBytes(lenarry);
+                sendbuf.writeBytes(jsondata.toString().getBytes());
+                sendbuf.writeBytes("\r\n\r\n".getBytes());
+                ChannelFuture write = oldch.writeAndFlush(sendbuf);
+                if (!write.isSuccess()) {
+                    System.out.println("notify new login failed: " + write.cause());
+                }
+                dc.removeDevChannel(uuid);
+                write.addListener(ChannelFutureListener.CLOSE);
+            }
+
             dc.bandUserAndChannel(uuid, pwd, ctx.channel());
             ByteBuf sendbuf = ctx.alloc().heapBuffer(msg_ok.length);
             sendbuf.writeBytes(msg_ok);

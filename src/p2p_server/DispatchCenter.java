@@ -76,6 +76,7 @@ public class DispatchCenter {
         c.close();
         
         UserAndChannel.remove(key);
+        
     }
     
     public void removeDevChannel(Channel oldChannel)
